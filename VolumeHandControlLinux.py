@@ -13,46 +13,45 @@ cap.set(4, hCam)
 pTime = 0
 cTime = 0
 
-detector = htm.handDetector()
+detector = htm.handDetector(maxHands=1)
 
 minVol = 0
 maxVol = 100
 volBar = 400
 volPer = 0
+area = 0
+
 
 
 while True:
     success, img = cap.read()
     img = detector.findHands(img)
-    lmList = detector.findPosition(img, draw=False)
+    lmList, bbox = detector.findPosition(img, draw=True)
     if len(lmList) != 0:
-        # print(lmList[4], lmList[8])
 
-        x1, y1 = lmList[4][1], lmList[4][2]
-        x2, y2 = lmList[8][1], lmList[8][2]
-        cx, cy = (x1+x2) // 2, (y1+y2) // 2
+        area = (bbox[2]-bbox[0]) * (bbox[3]-bbox[1])//100
+        #print(area)
 
-        cv2.circle(img, (x1, y1), 10, (255, 0, 0), cv2.FILLED)
-        cv2.circle(img, (x2, y2), 10, (255, 0, 0), cv2.FILLED)
-        cv2.line(img, (x1, y1), (x2, y2), (255, 0, 0), 3)
-        cv2.circle(img, (cx, cy), 10, (255, 0, 0), cv2.FILLED)
+        if 200 < area < 1000:
+            length, img, lineInfo = detector.findDistance(4, 8, img)
+            # print(length)
 
-        length = math.hypot(x2 - x1, y2 - y1)
-        # print(length)
+            # My hand range: 20 - 250
+            # Volume range -65 - 0
 
-        # My hand range: 20 - 250
-        # Volume range -65 - 0
+            vol = np.interp(length, [20, 200], [minVol, maxVol])
+            volBar = np.interp(length, [20, 200], [400, 150])
+            volPer = np.interp(length, [20, 200], [0, 100])
+            
+            smoothness = 10
+            volPer = smoothness * round(volPer/smoothness)
 
-        vol = np.interp(length, [20, 200], [minVol, maxVol])
-        volBar = np.interp(length, [20, 200], [400, 150])
-        volPer = np.interp(length, [20, 200], [0, 100])
-        print(length, vol)
-        if (vol <= 100) and (vol >= 0):
-            call(["amixer", "-D", "pulse", "sset", "Master", str(vol)+"%"])
-            valid = True
-
-        if length < 20:
-            cv2.circle(img, (cx, cy), 10, (0, 255, 0), cv2.FILLED)
+            fingers = detector.fingersUp()
+            # print(fingers)
+            
+            if not fingers[3]:
+                call(["amixer", "-D", "pulse", "-q", "sset", "Master", str(vol)+"%"])
+                cv2.circle(img, (lineInfo[4], lineInfo[5]), 10, (0, 255, 0), cv2.FILLED)
 
         cv2.rectangle(img, (50, 150), (85, 400), (0, 255, 0), 3)
         cv2.rectangle(img, (50, int(volBar)), (85, 400), (0, 255, 0), cv2.FILLED)
@@ -62,7 +61,7 @@ while True:
     fps = 1 / (cTime - pTime)
     pTime = cTime
 
-    cv2.putText(img, str(int(fps)), (10, 30), cv2.FONT_ITALIC, 1, (255, 0, 255), 2)
+    cv2.putText(img, str(int(fps)), (10, 30), cv2.FONT_ITALIC, 1, (255, 0, 0), 2)
 
     cv2.imshow("Image", img)
     cv2.waitKey(1)
